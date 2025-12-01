@@ -1,0 +1,1 @@
+import { whereAmI, locationGeneralData as whereAmInfo } from "./promiseChaining";
