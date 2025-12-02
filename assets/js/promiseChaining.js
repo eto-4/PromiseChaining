@@ -1,29 +1,35 @@
-// Fitxer configuració General
 import dotenv from 'dotenv';
 dotenv.config();
 
-// Exercici1
-// Funció per obtenir dades
+// Comprovació que existeix la clau d'API
+if (!process.env.API_KEY) throw new Error("No s'ha pogut accedir a la API_KEY");
+
+/**
+ * Exercici1
+ * Funció per obtenir informació geogràfica aproximada a partir de coordenades.
+ * Utilitza l'API PositionStack per a fer reverse geocoding.
+ * 
+ * @param {number} lat - Latitud de la posició.
+ * @param {number} lng - Longitud de la posició.
+ * @returns {Promise<Object|undefined>} Retorna un objecte amb informació localitzada,
+ * o undefined si hi ha algun error.
+ */
 export function whereAmI(lat, lng) {
     return fetch(
-        `https://api.positionstack.com/v1/reverse
-        ?access_key=${process.env.API_KEY}
-        &query=${lat},${lng}
-        `.trim().replace(/\s*\n\s*/g, '')
+        `https://api.positionstack.com/v1/reverse?access_key=${process.env.API_KEY}&query=${lat},${lng}`.trim().replace(/\s*\n\s*/g, '')
     )
-    // Formatar les dades
-    .then(res => {
-        // console.log(res);
-        return res.json();
-    })
+    // Convertir resposta a JSON
+    .then(res => res.json())
     .then(data => {
+        // Comprovació que hi hagi resultats
+        if (!data.data || data.data.length === 0) throw new Error("No s'han trobat resultats.");
 
-        // console.log(data);
+        // Selecciona la posició més propera comparant lat/lng
         const aprox = data.data.reduce((prev, curr) => {
             return curr.distance < prev.distance ? curr : prev;
-        })
+        });
 
-        // console.log(`Esteu a: ${aprox.name}, ${aprox.locality}, ${aprox.country}, ${aprox.latitude}, ${aprox.longitude}`);
+        // Retorna un objecte amb la informació rellevant
         return {
             'oName': aprox.name, 
             'locality': aprox.locality, 
@@ -34,83 +40,80 @@ export function whereAmI(lat, lng) {
             'longitude': aprox.longitude
         };
     })
-    .then(summary => {
-        return locationGeneralData(summary);
-    })
+    // Passa les dades a la funció locationGeneralData
+    .then(summary => locationGeneralData(summary))
     .catch(err => {
         console.error(`Hi ha hagut un problema buscant la teva localització: ${err}`);
         return;
-    })
+    });
 }
 
-// whereAmI(52.508, 13.381)
-// .then(res => {
-//     console.log(res);
-// })
-// .catch(err => {
-//     console.error("Error:" + err);
-// });
-
-// ------------------------------
 /**
- * TEST
-{
-  oName: 'Abgeordnetenhaus von Berlin',
-  locality: 'Berlin',
-  countryInfo: [ 'Germany', 'DEU' ],
-  region: 'Berlin',
-  postalCode: '10117',
-  latitude: 52.507925,
-  longitude: 13.381481
-}
- 
- * */ 
-// -------------------------------
-
-
+ * Exercici2
+ * Funció per obtenir informació detallada d'un país a partir del seu codi ISO3.
+ * Utilitza l'API REST Countries.
+ * 
+ * @param {Object} obj - Objecte amb informació bàsica de la localització.
+ * @returns {Promise<Object|undefined>} Retorna un objecte amb informació del país,
+ * o undefined si hi ha algun error.
+ */
 export function locationGeneralData(obj) {
     console.log(obj);
 
+    // Comprovació que l'objecte rebut no sigui buit
+    if (!obj) throw new Error("L'objecte rebut està buit");
+
+    // Mapa de codis ISO3 a ISO2 (necessari per REST Countries)
     const iso3to2 = {
-      DEU: 'DE',
-      ESP: 'ES',
-      FRA: 'FR',
-      ITA: 'IT',
-      USA: 'US',
-      GBR: 'GB',
+        DEU: 'DE',
+        ESP: 'ES',
+        FRA: 'FR',
+        ITA: 'IT',
+        USA: 'US',
+        GBR: 'GB',
     };
     const countryCode2 = iso3to2[obj.countryInfo[1]] || '';
 
-    return fetch(
-        `https://api.positionstack.com/v1/forward
-        ?access_key=${process.env.API_KEY}
-        &query=${obj.oName || obj.postalCode}
-        &country=${countryCode2}
-        &region=${obj.region}
-        &country_module=1
-        &timezone_module=1
-        `.trim().replace(/\s*\n\s*/g, '')
-    )
+    return fetch(`https://restcountries.com/v3.1/alpha/${countryCode2}`)
     .then(res => {
+        if (!res.ok) throw new Error(`REST Countries API error: ${res.status}`);
         return res.json();
     })
     .then(data => {
-        return data;
+        const country = data[0];
+        if (!country) throw new Error("No s'ha trobat cap país");
+
+        // Retorna objecte amb dades detallades del país
+        return {
+            name: country.name.common || '',
+            officialName: country.name.official || '',
+            capital: country.capital ? country.capital[0] : '',
+            region: country.region || '',
+            subRegion: country.subregion || '',
+            population: country.population || 0,
+            languages: country.languages || {},
+            currencies: country.currencies || {},
+            flagEmoji: country.flag || '',
+            flagURL: country.flags.png || '',
+            mapURL: country.maps?.googleMaps || '',
+        };
     })
     .catch(err => {
         console.error(`Hi ha hagut un problema generant les dades: ${err}`);
         return;
-    })
+    });
 }
 
+// ------------------------------
+// Exemple d'ús
 const lat = 52.508;
 const lng = 13.381;
 
 whereAmI(lat, lng)
 .then(finalData => {
-    console.log('Resultado final completo:', JSON.stringify(finalData, null, 2));
+    console.log('Resultat final complet:', JSON.stringify(finalData, null, 2));
 });
 
 // Pregunta: 
 // 'Si recàrregues la pàgina, apareixen els resultats en el mateix ordre?, expliqueu el perquè.'
-// Resposata:
+// Resposta:
